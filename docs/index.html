@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Astrolocartography Location Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-bg"></div>
+
+  <header class="topbar">
+    <div class="title-wrap">
+      <h1>Astrolocartography Location Simulator</h1>
+      <p>UTC conversion, GMST, planetary lines, and interactive city-aware mapping</p>
+    </div>
+    <button id="togglePanel" class="toggle-btn" type="button">Hide Panel</button>
+  </header>
+
+  <main class="layout">
+    <aside class="panel" id="panel">
+      <section class="card">
+        <h2>Birth Input</h2>
+        <form id="birthForm" class="form-grid">
+          <label>Birth Year<input type="number" name="birthYear" required value="1998" /></label>
+          <label>Birth Month<input type="number" name="birthMonth" min="1" max="12" required value="7" /></label>
+          <label>Birth Day<input type="number" name="birthDay" min="1" max="31" required value="18" /></label>
+          <label>Hour (local)<input type="number" name="hour" min="0" max="23" required value="14" /></label>
+          <label>Minute (local)<input type="number" name="minute" min="0" max="59" required value="30" /></label>
+          <label>Birth Latitude<input type="number" name="latitude" step="0.0001" required value="48.8566" /></label>
+          <label>Birth Longitude<input type="number" name="longitude" step="0.0001" required value="2.3522" /></label>
+          <button class="run-btn" type="submit">Generate Astro Lines</button>
+        </form>
+      </section>
+
+      <section class="card metrics" id="metrics">
+        <h2>Computation Output</h2>
+        <div><span>Timezone:</span><strong id="timezoneOut">-</strong></div>
+        <div><span>UTC Time:</span><strong id="utcOut">-</strong></div>
+        <div><span>GMST:</span><strong id="gmstOut">-</strong></div>
+      </section>
+
+      <section class="card legend" id="legendCard">
+        <h2>Map Key</h2>
+        <p class="small">Planet lines are color coded by planet. Line styles show angle type:</p>
+        <ul>
+          <li><span class="swatch sw-mc"></span> MC (solid)</li>
+          <li><span class="swatch sw-ic"></span> IC (solid dim)</li>
+          <li><span class="swatch sw-ac"></span> AC (dashed)</li>
+          <li><span class="swatch sw-dc"></span> DC (dotted)</li>
+        </ul>
+        <div class="planet-list" id="planetList"></div>
+      </section>
+    </aside>
+
+    <section class="map-stage">
+      <div id="map"></div>
+      <div class="map-note">Includes US state capitals (plus LA, Las Vegas, Virginia Beach, New York, Fort Wayne, Miami) and one capital city marker per country where available.</div>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>
