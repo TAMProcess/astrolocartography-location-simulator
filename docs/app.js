@@ -25,7 +25,69 @@ const form = document.getElementById('birthForm');
 const togglePanelBtn = document.getElementById('togglePanel');
 const panel = document.getElementById('panel');
 
+const { DateTime } = luxon;
+
+const PLANETS = [
+  { key: 'Sun', body: Astronomy.Body.Sun, color: '#f59e0b' },
+  { key: 'Moon', body: Astronomy.Body.Moon, color: '#e5e7eb' },
+  { key: 'Mercury', body: Astronomy.Body.Mercury, color: '#9ca3af' },
+  { key: 'Venus', body: Astronomy.Body.Venus, color: '#ec4899' },
+  { key: 'Mars', body: Astronomy.Body.Mars, color: '#ef4444' },
+  { key: 'Jupiter', body: Astronomy.Body.Jupiter, color: '#f97316' },
+  { key: 'Saturn', body: Astronomy.Body.Saturn, color: '#eab308' },
+  { key: 'Uranus', body: Astronomy.Body.Uranus, color: '#06b6d4' },
+  { key: 'Neptune', body: Astronomy.Body.Neptune, color: '#3b82f6' },
+  { key: 'Pluto', body: Astronomy.Body.Pluto, color: '#7c3aed' }
+];
+
 let activePolylines = [];
+
+function normalize180(deg) {
+  let value = deg;
+  while (value > 180) value -= 360;
+  while (value < -180) value += 360;
+  return value;
+}
+
+function julianDay(date) {
+  const ms = date.getTime();
+  return ms / 86400000 + 2440587.5;
+}
+
+function gmstDegrees(date) {
+  const jd = julianDay(date);
+  const d = jd - 2451545.0;
+  const gmst = 280.46061837 + 360.98564736629 * d;
+  return ((gmst % 360) + 360) % 360;
+}
+
+function planetEquatorial(body, utcDate) {
+  const astroTime = new Astronomy.AstroTime(utcDate);
+  const observer = new Astronomy.Observer(0, 0, 0);
+  const eq = Astronomy.Equator(body, astroTime, observer, true, true);
+  return {
+    raHours: eq.ra,
+    raDeg: eq.ra * 15,
+    decDeg: eq.dec
+  };
+}
+
+function computeCurve(decDeg, raDeg, gmstDeg, isAsc) {
+  const points = [];
+  for (let lat = -89; lat <= 89; lat += 1) {
+    const phi = lat * Math.PI / 180;
+    const dec = decDeg * Math.PI / 180;
+    const cosH = -Math.tan(phi) * Math.tan(dec);
+
+    if (cosH < -1 || cosH > 1) continue;
+
+    const h0Deg = Math.acos(cosH) * 180 / Math.PI;
+    const hourAngle = isAsc ? -h0Deg : h0Deg;
+    const longitude = normalize180(raDeg + hourAngle - gmstDeg);
+    points.push([lat, longitude]);
+  }
+  return points;
+}
 
 function normalizeLineWeight() {
   const z = map.getZoom();
@@ -42,6 +104,71 @@ function addLegendPlanets(planets) {
     row.innerHTML = `<span class="planet-dot" style="background:${p.color}"></span><span>${p.name}</span>`;
     planetList.appendChild(row);
   });
+}
+
+async function timezoneFromCoordinates(latitude, longitude) {
+  const url = `https://timeapi.io/api/TimeZone/coordinate?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error('Timezone lookup request failed');
+  const data = await resp.json();
+  if (!data.timeZone) throw new Error('Timezone lookup did not return a zone');
+  return data.timeZone;
+}
+
+async function buildAstroResult(input) {
+  const timezone = await timezoneFromCoordinates(input.latitude, input.longitude);
+
+  const local = DateTime.fromObject(
+    {
+      year: input.birthYear,
+      month: input.birthMonth,
+      day: input.birthDay,
+      hour: input.hour,
+      minute: input.minute,
+      second: 0,
+      millisecond: 0
+    },
+    { zone: timezone }
+  );
+
+  if (!local.isValid) {
+    throw new Error('Invalid date/time for that location timezone');
+  }
+
+  const utc = local.toUTC();
+  const utcDate = utc.toJSDate();
+  const gmstDeg = gmstDegrees(utcDate);
+
+  const planets = PLANETS.map((planet) => {
+    const eq = planetEquatorial(planet.body, utcDate);
+    const mcLon = normalize180(eq.raDeg - gmstDeg);
+    const icLon = normalize180(mcLon + 180);
+
+    return {
+      name: planet.key,
+      color: planet.color,
+      raHours: eq.raHours,
+      decDeg: eq.decDeg,
+      lines: {
+        mc: { longitude: mcLon, points: [[-89, mcLon], [89, mcLon]] },
+        ic: { longitude: icLon, points: [[-89, icLon], [89, icLon]] },
+        ac: { points: computeCurve(eq.decDeg, eq.raDeg, gmstDeg, true) },
+        dc: { points: computeCurve(eq.decDeg, eq.raDeg, gmstDeg, false) }
+      }
+    };
+  });
+
+  return {
+    timezone,
+    utc: {
+      iso: utc.toISO(),
+      formatted: utc.toFormat('HH:mm')
+    },
+    gmst: {
+      degrees: gmstDeg
+    },
+    planets
+  };
 }
 
 async function loadBoundaries() {
@@ -147,16 +274,7 @@ form.addEventListener('submit', async (event) => {
   );
 
   try {
-    const response = await fetch('/api/astro-lines', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(numericPayload)
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to generate lines');
-    }
+    const data = await buildAstroResult(numericPayload);
 
     timezoneOut.textContent = data.timezone;
     utcOut.textContent = `${data.utc.formatted} UTC (${data.utc.iso})`;
